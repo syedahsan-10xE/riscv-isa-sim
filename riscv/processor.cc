@@ -591,9 +591,27 @@ void processor_t::check_if_lpad_required()
   }
 }
 
+
+  //substr(start, length)` is a method of `std::string` that returns a substring starting at position `start` and of length `length
 void processor_t::disasm(insn_t insn)
 {
   uint64_t bits = insn.bits();
+  static int exc = 0;  // Static so it retains value across function calls
+  // Predefine the specific instruction to track (addi in this case)
+  const std::string target_instruction = "bnez";
+  std::string current_instruction = disassembler->disassemble(insn);
+  bool is_target = current_instruction.substr(0, target_instruction.length()) == target_instruction;
+  
+    // Print repetition message for targeted instruction in real-time
+  if (is_target) {
+    std::stringstream s;
+    s << "core " << std::dec << std::setfill(' ') << std::setw(3) << id
+      << ": Same instruction repeated " << exc << " times: "
+      << current_instruction << std::endl;
+    debug_output_log(&s);
+    exc = exc + 1;
+  }
+
   if (last_pc != state.pc || last_bits != bits) {
     std::stringstream s;  // first put everything in a string, later send it to output
 
@@ -614,7 +632,7 @@ void processor_t::disasm(insn_t insn)
     s << "core " << std::dec << std::setfill(' ') << std::setw(3) << id
       << std::hex << ": 0x" << std::setfill('0') << std::setw(max_xlen / 4)
       << zext(state.pc, max_xlen) << " (0x" << std::setw(8) << bits << ") "
-      << disassembler->disassemble(insn) << std::endl;
+      << current_instruction << std::endl;
 
     debug_output_log(&s);
 
@@ -623,6 +641,14 @@ void processor_t::disasm(insn_t insn)
     executions = 1;
   } else {
     executions++;
+    
+    // Print repetition message for targeted instruction in real-time
+    std::stringstream s;
+    s << "core " << std::dec << std::setfill(' ') << std::setw(3) << id
+      << ": Same instruction repeated " << executions << " times: "
+      << current_instruction << std::endl;
+    debug_output_log(&s);
+    
   }
 }
 
