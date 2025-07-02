@@ -489,10 +489,10 @@ reg_t mmu_t::s2xlate(reg_t gva, reg_t gpa, access_type type, access_type trap_ty
       auto pte_paddr = base + idx * vm.ptesize;
       reg_t pte = pte_load(pte_paddr, gva, virt, trap_type, vm.ptesize);
       
-      // Enable logging if PTE_V is set and logging is not already enabled
-      if ((pte & PTE_V)) {
-         proc->enable_log_commits();
-      }
+      //// Enable logging if PTE_V is set and logging is not already enabled
+      //if ((pte & PTE_V)) {
+      //   proc->enable_log_commits();
+      //}
       reg_t ppn = (pte & ~reg_t(PTE_ATTR)) >> PTE_PPN_SHIFT;
       bool pbmte = proc->get_state()->menvcfg->read() & MENVCFG_PBMTE;
       bool hade = proc->get_state()->menvcfg->read() & MENVCFG_ADUE;
@@ -595,11 +595,39 @@ reg_t mmu_t::walk(mem_access_info_t access_info)
     // check that physical address of PTE is legal
     auto pte_paddr = s2xlate(addr, base + idx * vm.ptesize, LOAD, type, virt, false, true);
     reg_t pte = pte_load(pte_paddr, addr, virt, type, vm.ptesize);
-    
-    // Enable logging if PTE_V is set and logging is not already enabled
+
     if ((pte & PTE_V)) {
-       proc->enable_log_commits();
-    }
+    printf("XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX\n");
+    printf("XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX\n");
+    printf("base address/page table address: 0x%08lx\n", (unsigned long)base);
+    printf("VPN[%d]: 0x%08lx\n", i, (unsigned long)idx);
+    printf("virtual addr: 0x%08x\n", (unsigned int)addr);
+    printf("PTE level: %d\n", i);
+    printf("[PTW] PTE raw: 0x%016lx\n", pte);
+    printf("PTE_PHYSICAL_ADDR: 0x%016lx\n", pte_paddr);
+    // Decode PTE fields (example for RISC-V Sv32)
+    printf("[PTW] PTE: PPN=0x%lx D=%ld A=%ld G=%ld U=%ld X=%ld W=%ld R=%ld V=%ld\n",
+        (pte >> 10),       // PPN
+        (pte >> 7) & 1,    // D (dirty bit)
+        (pte >> 6) & 1,    // A (Accessed bit)
+        (pte >> 5) & 1,    // G (global) enable
+        (pte >> 4) & 1,    // U (user) enable
+        (pte >> 3) & 1,    // X (execute) enable
+        (pte >> 2) & 1,    // W (write enable)
+        (pte >> 1) & 1,    // R (read enable)
+        (pte >> 0) & 1     // V (valid bit)
+    );
+    printf("XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX\n");
+    printf("XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX\n");
+    printf("                                               \n");
+    printf("                                               \n");
+
+
+    // Enable logging if PTE_V is set and logging is not already enabled
+      proc->enable_log_commits();
+
+    } 
+
     reg_t ppn = (pte & ~reg_t(PTE_ATTR)) >> PTE_PPN_SHIFT;
     bool pbmte = virt ? (proc->get_state()->henvcfg->read() & HENVCFG_PBMTE) : (proc->get_state()->menvcfg->read() & MENVCFG_PBMTE);
     bool hade = virt ? (proc->get_state()->henvcfg->read() & HENVCFG_ADUE) : (proc->get_state()->menvcfg->read() & MENVCFG_ADUE);

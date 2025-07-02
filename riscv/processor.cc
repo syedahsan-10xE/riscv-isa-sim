@@ -598,7 +598,7 @@ void processor_t::disasm(insn_t insn)
   uint64_t bits = insn.bits();
   static int exc = 0;  // Static so it retains value across function calls
   // Predefine the specific instruction to track (addi in this case)
-  const std::string target_instruction = "bnez";
+  const std::string target_instruction = ".";
   std::string current_instruction = disassembler->disassemble(insn);
   bool is_target = current_instruction.substr(0, target_instruction.length()) == target_instruction;
   
@@ -617,7 +617,7 @@ void processor_t::disasm(insn_t insn)
 
     const char* sym = get_symbol(state.pc);
     if (sym != nullptr)
-    {
+    { 
       s << "core " << std::dec << std::setfill(' ') << std::setw(3) << id
         << ": >>>>  " << sym << std::endl;
     }
@@ -640,14 +640,15 @@ void processor_t::disasm(insn_t insn)
     last_bits = bits;
     executions = 1;
   } else {
-    executions++;
+    
     
     // Print repetition message for targeted instruction in real-time
     std::stringstream s;
     s << "core " << std::dec << std::setfill(' ') << std::setw(3) << id
-      << ": Same instruction repeated " << executions << " times: "
+      << ": instruction repeated loop " << executions << " times: "
       << current_instruction << std::endl;
     debug_output_log(&s);
+    executions++;
     
   }
 }

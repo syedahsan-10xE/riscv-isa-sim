@@ -71,13 +71,16 @@ static void commit_log_print_insn(processor_t *p, reg_t pc, insn_t insn)
   int flen = p->get_state()->last_inst_flen;
 
   // print core id on all lines so it is easy to grep
-  fprintf(log_file, "coooooooooooore_numbers%4" PRId32 ": ", p->get_id());
+  fprintf(log_file, "core_numbers%4" PRId32 ": ", p->get_id());
 
   fprintf(log_file, "%1d ", priv);
   commit_log_print_value(log_file, xlen, pc);
   fprintf(log_file, " (");
   commit_log_print_value(log_file, insn.length() * 8, insn.bits());
   fprintf(log_file, ")");
+  printf("\n");
+
+
   bool show_vec = false;
 
   for (auto item : reg) {
@@ -121,14 +124,18 @@ static void commit_log_print_insn(processor_t *p, reg_t pc, insn_t insn)
                 p->VU.vflmul < 1 ? "mf" : "m",
                 p->VU.vflmul < 1 ? (long)(1 / p->VU.vflmul) : (long)p->VU.vflmul,
                 (long)p->VU.vl->read());
+
         show_vec = true;
     }
 
     if (!is_vec) {
       if (prefix == 'c')
+      {
         fprintf(log_file, " c%d_%s ", rd, csr_name(rd));
-      else
+      }
+      else{
         fprintf(log_file, " %c%-2d ", prefix, rd);
+      }
       if (is_vreg)
         commit_log_print_value(log_file, size, &p->VU.elt<uint8_t>(rd, 0));
       else
@@ -137,17 +144,20 @@ static void commit_log_print_insn(processor_t *p, reg_t pc, insn_t insn)
   }
 
   for (auto item : load) {
-    fprintf(log_file, " mem ");
+    fprintf(log_file, " mem ");  
     commit_log_print_value(log_file, xlen, std::get<0>(item));
   }
 
   for (auto item : store) {
     fprintf(log_file, " mem ");
+
     commit_log_print_value(log_file, xlen, std::get<0>(item));
     fprintf(log_file, " ");
     commit_log_print_value(log_file, std::get<2>(item) << 3, std::get<1>(item));
   }
   fprintf(log_file, "\n");
+  printf("-----------------------------------------------------------------------\n");
+
 }
 
 inline void processor_t::update_histogram(reg_t pc)
