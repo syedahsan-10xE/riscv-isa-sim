@@ -433,9 +433,13 @@ void sim_t::idle()
     interactive();
   else {
     if (instruction_limit.has_value()) {
+      printf("Instruction Limit set to: %lld \n",
+               *instruction_limit);
       if (*instruction_limit < INTERLEAVE) {
         // Final step.
         step(*instruction_limit);
+        printf("Exiting simulation after %lld instructions.\n",
+               *instruction_limit);
         htif_exit(0);
         *instruction_limit = 0;
         return;
