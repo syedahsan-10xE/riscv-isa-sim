@@ -596,11 +596,12 @@ reg_t mmu_t::walk(mem_access_info_t access_info)
     auto pte_paddr = s2xlate(addr, base + idx * vm.ptesize, LOAD, type, virt, false, true);
     reg_t pte = pte_load(pte_paddr, addr, virt, type, vm.ptesize);
 
-    if ((pte & PTE_V)) {
+    if ((pte & PTE_V) && ((type == FETCH) || (type == LOAD) || (type == STORE)) && (addr == proc->state.pc))  {
     printf("XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX\n");
     printf("XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX\n");
     printf("base address/page table address: 0x%08lx\n", (unsigned long)base);
     printf("VPN[%d]: 0x%08lx\n", i, (unsigned long)idx);
+    printf("state pc: 0x%08lx\n", (unsigned int)proc->state.pc);
     printf("virtual addr: 0x%08x\n", (unsigned int)addr);
     printf("PTE level: %d\n", i);
     printf("[PTW] PTE raw: 0x%016lx\n", pte);
