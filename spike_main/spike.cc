@@ -32,6 +32,7 @@ static void help(int exit_code = 1)
   fprintf(stderr, "  -m<a:m,b:n,...>       Provide memory regions of size m and n bytes\n");
   fprintf(stderr, "                          at base addresses a and b (with 4 KiB alignment)\n");
   fprintf(stderr, "  -d                    Interactive debug mode\n");
+  fprintf(stderr, "  -d_pte                    Interactive debug mode for PTE\n");
   fprintf(stderr, "  -g                    Track histogram of PCs\n");
   fprintf(stderr, "  -l                    Generate a log of execution\n");
 #ifdef HAVE_BOOST_ASIO
@@ -318,6 +319,7 @@ static std::vector<size_t> parse_hartids(const char *s)
 
 int main(int argc, char** argv)
 {
+  bool d_pte = false;
   bool debug = false;
   bool halted = false;
   bool histogram = false;
@@ -414,6 +416,10 @@ int main(int argc, char** argv)
       fprintf(stderr, "Unable to load extlib '%s': %s\n", s, dlerror());
       exit(-1);
     }
+  });
+  parser.option(0, "d_pte", 0,
+              [&](const char UNUSED *s){
+              cfg.debug_ptw_enable = true;
   });
   parser.option(0, "dm-progsize", 1,
       [&](const char* s){dm_config.progbufsize = atoul_safe(s);});
