@@ -596,12 +596,11 @@ reg_t mmu_t::walk(mem_access_info_t access_info)
     auto pte_paddr = s2xlate(addr, base + idx * vm.ptesize, LOAD, type, virt, false, true);
     reg_t pte = pte_load(pte_paddr, addr, virt, type, vm.ptesize);
 
-    if ((pte & PTE_V) && ((type == FETCH) || (type == LOAD) || (type == STORE)) && (addr == proc->state.pc))  {
-    printf("XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX\n");
-    printf("XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX\n");
+    if ((pte & PTE_V) && (addr == proc->state.pc)){
+    printf("\033[1;38;2;0;255;255m VM Page table Walk logs\033[0m\n");
     printf("base address/page table address: 0x%08lx\n", (unsigned long)base);
     printf("VPN[%d]: 0x%08lx\n", i, (unsigned long)idx);
-    printf("state pc: 0x%08lx\n", (unsigned int)proc->state.pc);
+    printf("state pc: 0x%08x\n", (unsigned int)proc->state.pc);
     printf("virtual addr: 0x%08x\n", (unsigned int)addr);
     printf("PTE level: %d\n", i);
     printf("[PTW] PTE raw: 0x%016lx\n", pte);
@@ -618,7 +617,15 @@ reg_t mmu_t::walk(mem_access_info_t access_info)
         (pte >> 1) & 1,    // R (read enable)
         (pte >> 0) & 1     // V (valid bit)
     );
-    printf("XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX\n");
+    printf("PTE Offset bits: ");
+    printf("%c",(pte >> 7) & 1 ? 'd' : '.');
+    printf("%c",(pte >> 6) & 1 ? 'a' : '.');
+    printf("%c",(pte >> 5) & 1 ? 'g' : '.');
+    printf("%c",(pte >> 4) & 1 ? 'u' : '.');
+    printf("%c",(pte >> 3) & 1 ? 'x' : '.');
+    printf("%c",(pte >> 2) & 1 ? 'w' : '.');
+    printf("%c",(pte >> 1) & 1 ? 'r' : '.');
+    printf("%c\n",(pte >> 0) & 1 ? 'v' : '.');
     printf("XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX\n");
     printf("                                               \n");
     printf("                                               \n");

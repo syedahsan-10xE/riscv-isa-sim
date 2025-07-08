@@ -419,11 +419,11 @@ void processor_t::take_trap(trap_t& t, reg_t epc)
 
   if (debug) {
     std::stringstream s; // first put everything in a string, later send it to output
-    s << "core " << std::dec << std::setfill(' ') << std::setw(3) << id
+    s << "<core " << std::dec << std::setfill(' ') << std::setw(3) << id << ">"
       << ": exception " << t.name() << ", epc 0x"
       << std::hex << std::setfill('0') << std::setw(max_xlen/4) << zext(epc, max_xlen) << std::endl;
     if (t.has_tval())
-       s << "core " << std::dec << std::setfill(' ') << std::setw(3) << id
+       s << "<core " << std::dec << std::setfill(' ') << std::setw(3) << id << ">"
          << ":           tval 0x" << std::hex << std::setfill('0') << std::setw(max_xlen / 4)
          << zext(t.get_tval(), max_xlen) << std::endl;
     debug_output_log(&s);
@@ -558,8 +558,8 @@ void processor_t::take_trigger_action(triggers::action_t action, reg_t breakpoin
 {
   if (debug) {
     std::stringstream s; // first put everything in a string, later send it to output
-    s << "core " << std::dec << std::setfill(' ') << std::setw(3) << id
-      << ": trigger action " << (int)action << std::endl;
+    s << "<core " << std::dec << std::setfill(' ') << std::setw(3) << id << ">";
+    s << ": trigger action " << (int)action << std::endl;
     debug_output_log(&s);
   }
 
@@ -597,6 +597,7 @@ void processor_t::disasm(insn_t insn)
 {
   uint64_t bits = insn.bits();
   static int exc = 0;  // Static so it retains value across function calls
+  static uint64_t pc_count = 0;
   // Predefine the specific instruction to track (addi in this case)
   const std::string target_instruction = ".";
   std::string current_instruction = disassembler->disassemble(insn);
@@ -605,7 +606,7 @@ void processor_t::disasm(insn_t insn)
     // Print repetition message for targeted instruction in real-time
   if (is_target) {
     std::stringstream s;
-    s << "core " << std::dec << std::setfill(' ') << std::setw(3) << id
+    s << "<core " << std::dec << std::setfill(' ') << std::setw(3) << id << ">"
       << ": Same instruction repeated " << exc << " times: "
       << current_instruction << std::endl;
     debug_output_log(&s);
@@ -614,22 +615,35 @@ void processor_t::disasm(insn_t insn)
 
   if (last_pc != state.pc || last_bits != bits) {
     std::stringstream s;  // first put everything in a string, later send it to output
-
+    pc_count++;
     const char* sym = get_symbol(state.pc);
     if (sym != nullptr)
-    { 
-      s << "core " << std::dec << std::setfill(' ') << std::setw(3) << id
-        << ": >>>>  " << sym << std::endl;
+    {
+      s << "<core " << std::dec << std::setfill(' ') << std::setw(3) << id << ">"
+        << ": >>>>  \033[1;38;2;255;165;0m" << sym << "\033[0m" << std::endl;
     }
 
     if (executions != 1) {
-      s << "core " << std::dec << std::setfill(' ') << std::setw(3) << id
+      s << "<core " << std::dec << std::setfill(' ') << std::setw(3) << id << ">"
         << ": Executed " << executions << " times" << std::endl;
     }
+    printf("\n");
+    printf("-----------------------------------------------------------------------\n");
+    printf("\033[1;38;2;207;255;0mSTART\033[0m\n");
+    printf("PC_COUNT's = %ld", pc_count);
+    if(state.prv == 0)
+      fprintf(log_file, "\033[1;97mU-mode\033[0m\n");
+    else if(state.prv == 1)
+      fprintf(log_file, "\033[1;97mS-mode\033[0m\n");
+    else if(state.prv == 2)
+      fprintf(log_file, "Reserved\n");
+    else
+      fprintf(log_file, "\033[1;97mM-mode\033[0m\n");
+    printf("\n");
 
     unsigned max_xlen = isa.get_max_xlen();
 
-    s << "core " << std::dec << std::setfill(' ') << std::setw(3) << id
+    s << "<core " << std::dec << std::setfill(' ') << std::setw(3) << id << ">"
       << std::hex << ": 0x" << std::setfill('0') << std::setw(max_xlen / 4)
       << zext(state.pc, max_xlen) << " (0x" << std::setw(8) << bits << ") "
       << current_instruction << std::endl;
@@ -644,7 +658,7 @@ void processor_t::disasm(insn_t insn)
     
     // Print repetition message for targeted instruction in real-time
     std::stringstream s;
-    s << "core " << std::dec << std::setfill(' ') << std::setw(3) << id
+    s << "<core " << std::dec << std::setfill(' ') << std::setw(3) << id << ">"
       << ": instruction repeated loop " << executions << " times: "
       << current_instruction << std::endl;
     debug_output_log(&s);
