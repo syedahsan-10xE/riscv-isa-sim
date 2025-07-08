@@ -71,9 +71,18 @@ static void commit_log_print_insn(processor_t *p, reg_t pc, insn_t insn)
   int flen = p->get_state()->last_inst_flen;
 
   // print core id on all lines so it is easy to grep
-  fprintf(log_file, "core_numbers%4" PRId32 ": ", p->get_id());
+  fprintf(log_file, "<core%4" PRId32 ">: ", p->get_id());
 
-  fprintf(log_file, "%1d ", priv);
+  //fprintf(log_file, "%1d ", priv);
+  if(priv == 0)
+    fprintf(log_file, "U-mode\n");
+  else if(priv == 1)
+    fprintf(log_file, "S-mode\n");
+  else if(priv == 2)
+    fprintf(log_file, "Reserved\n");
+  else
+    fprintf(log_file, "M-mode\n");
+  printf("\n");
   commit_log_print_value(log_file, xlen, pc);
   fprintf(log_file, " (");
   commit_log_print_value(log_file, insn.length() * 8, insn.bits());
@@ -156,7 +165,6 @@ static void commit_log_print_insn(processor_t *p, reg_t pc, insn_t insn)
     commit_log_print_value(log_file, std::get<2>(item) << 3, std::get<1>(item));
   }
   fprintf(log_file, "\n");
-  printf("-----------------------------------------------------------------------\n");
 
 }
 
@@ -186,6 +194,14 @@ static inline reg_t execute_insn_logged(processor_t* p, reg_t pc, insn_fetch_t f
       if (p->get_log_commits_enabled()) {
         commit_log_print_insn(p, pc, fetch.insn);
       }
+          printf("PC log's\n");
+          printf("Executed instruction at PC <---- %x\n", (unsigned int)pc);
+          printf("Instruction opcode: %lx\n", fetch.insn.bits());
+          // Print "END" in green color
+          printf("\033[1;92mEND\033[0m\n");
+          printf("-----------------------------------------------------------------------\n");
+
+          printf("\n");
      }
   } catch (wait_for_interrupt_t &t) {
       if (p->get_log_commits_enabled()) {
