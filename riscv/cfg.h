@@ -83,6 +83,7 @@ public:
 
   size_t nprocs() const { return hartids.size(); }
   size_t max_hartid() const { return hartids.back(); }
+  bool debug_ptw_enable;
 };
 
 #endif

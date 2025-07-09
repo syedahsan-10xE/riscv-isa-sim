@@ -556,19 +556,19 @@ reg_t mmu_t::s2xlate(reg_t gva, reg_t gpa, access_type type, access_type trap_ty
 
 reg_t mmu_t::walk(mem_access_info_t access_info)
 {
-  access_type type = access_info.type;
-  reg_t addr = access_info.transformed_vaddr;
-  bool virt = access_info.effective_virt;
-  bool hlvx = access_info.flags.hlvx;
-  reg_t mode = access_info.effective_priv;
-  reg_t page_mask = (reg_t(1) << PGSHIFT) - 1;
-  reg_t satp = proc->get_state()->satp->readvirt(virt);
-  vm_info vm = decode_vm_info(proc->get_const_xlen(), false, mode, satp);
+  access_type type = access_info.type;   //contains memory access details (virtual address, access type, privilege level
+  reg_t addr = access_info.transformed_vaddr;  //Get the virtual address to translate
+  bool virt = access_info.effective_virt; // Check if virtualization is enabled
+  bool hlvx = access_info.flags.hlvx; //Check if this is a hypervisor load/store with execute semantics
+  reg_t mode = access_info.effective_priv; //Get current privilege mode (User, Supervisor, Machine)
+  reg_t page_mask = (reg_t(1) << PGSHIFT) - 1;  //Create page offset mask (e.g., 0xFFF for 4KB pages)
+  reg_t satp = proc->get_state()->satp->readvirt(virt); //Read SATP (Supervisor Address Translation and Protection) register
+  vm_info vm = decode_vm_info(proc->get_const_xlen(), false, mode, satp); //Decode VM configuration (page table levels, base address, index bits, etc.)
 
-  bool ss_access = access_info.flags.ss_access;
+  bool ss_access = access_info.flags.ss_access;   //shadow stack — a special protected memory area for storing return addresses.
 
-  if (ss_access) {
-    if (vm.levels == 0)
+  if (ss_access) {  //virtual memory is disabled — no page tables
+    if (vm.levels == 0) //Shadow stacks can't be used without page tables → throw fault
       throw trap_store_access_fault(virt, addr, 0, 0);
     type = STORE;
   }
@@ -577,8 +577,8 @@ reg_t mmu_t::walk(mem_access_info_t access_info)
     return s2xlate(addr, addr & ((reg_t(2) << (proc->xlen-1))-1), type, type, virt, hlvx, false) & ~page_mask; // zero-extend from xlen
 
   bool s_mode = mode == PRV_S;
-  bool sum = proc->state.sstatus->readvirt(virt) & MSTATUS_SUM;
-  bool mxr = (proc->state.sstatus->readvirt(false) | proc->state.sstatus->readvirt(virt)) & MSTATUS_MXR;
+  bool sum = proc->state.sstatus->readvirt(virt) & MSTATUS_SUM; //enables U-mode memory access in S-mode.(Can access U-mode pages)
+  bool mxr = (proc->state.sstatus->readvirt(false) | proc->state.sstatus->readvirt(virt)) & MSTATUS_MXR; //allows execute-only pages to be read.
 
   // verify bits xlen-1:va_bits-1 are all equal
   int va_bits = PGSHIFT + vm.levels * vm.idxbits;
@@ -588,53 +588,81 @@ reg_t mmu_t::walk(mem_access_info_t access_info)
     vm.levels = 0;
 
   reg_t base = vm.ptbase;
+
+
+  reg_t idx_o = 0;
+  int pte_vm_level = 2;
+  reg_t pte_o = 0;
+  reg_t pte_paddr_o = 0;
+  bool bug_pte = false;
+  // Page fault case - print debug info
+
+
   for (int i = vm.levels - 1; i >= 0; i--) {
     int ptshift = i * vm.idxbits;
     reg_t idx = (addr >> (PGSHIFT + ptshift)) & ((1 << vm.idxbits) - 1);
 
     // check that physical address of PTE is legal
-    auto pte_paddr = s2xlate(addr, base + idx * vm.ptesize, LOAD, type, virt, false, true);
-    reg_t pte = pte_load(pte_paddr, addr, virt, type, vm.ptesize);
+    auto pte_paddr = s2xlate(addr, base + idx * vm.ptesize, LOAD, type, virt, false, true); //Calculate physical address of Page Table Entry (PTE)
+    reg_t pte = pte_load(pte_paddr, addr, virt, type, vm.ptesize);  //Load PTE from memory
 
-    if ((pte & PTE_V) && (addr == proc->state.pc)){
-    printf("\033[1;38;2;0;255;255m VM Page table Walk logs\033[0m\n");
-    printf("base address/page table address: 0x%08lx\n", (unsigned long)base);
-    printf("VPN[%d]: 0x%08lx\n", i, (unsigned long)idx);
-    printf("state pc: 0x%08x\n", (unsigned int)proc->state.pc);
-    printf("virtual addr: 0x%08x\n", (unsigned int)addr);
-    printf("PTE level: %d\n", i);
-    printf("[PTW] PTE raw: 0x%016lx\n", pte);
-    printf("PTE_PHYSICAL_ADDR: 0x%016lx\n", pte_paddr);
-    // Decode PTE fields (example for RISC-V Sv32)
-    printf("[PTW] PTE: PPN=0x%lx D=%ld A=%ld G=%ld U=%ld X=%ld W=%ld R=%ld V=%ld\n",
-        (pte >> 10),       // PPN
-        (pte >> 7) & 1,    // D (dirty bit)
-        (pte >> 6) & 1,    // A (Accessed bit)
-        (pte >> 5) & 1,    // G (global) enable
-        (pte >> 4) & 1,    // U (user) enable
-        (pte >> 3) & 1,    // X (execute) enable
-        (pte >> 2) & 1,    // W (write enable)
-        (pte >> 1) & 1,    // R (read enable)
-        (pte >> 0) & 1     // V (valid bit)
-    );
-    printf("PTE Offset bits: ");
-    printf("%c",(pte >> 7) & 1 ? 'd' : '.');
-    printf("%c",(pte >> 6) & 1 ? 'a' : '.');
-    printf("%c",(pte >> 5) & 1 ? 'g' : '.');
-    printf("%c",(pte >> 4) & 1 ? 'u' : '.');
-    printf("%c",(pte >> 3) & 1 ? 'x' : '.');
-    printf("%c",(pte >> 2) & 1 ? 'w' : '.');
-    printf("%c",(pte >> 1) & 1 ? 'r' : '.');
-    printf("%c\n",(pte >> 0) & 1 ? 'v' : '.');
-    printf("XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX\n");
-    printf("                                               \n");
-    printf("                                               \n");
+    if (pte & PTE_V) {
+      bool should_print = false;
+          
+      pte_vm_level = pte_vm_level - i;
+      idx_o = idx;
+      pte_o = pte;
+      pte_paddr_o = pte_paddr;
+      
+      if (proc->get_cfg().debug_ptw_enable) {
+          // Debug is high: print all to find the PTE fault
+          //should_print = true;
+          bug_pte = true;
+      } else {
+          // Debug is low: print only when addr == state.pc only page table walk no repetition
+          should_print = (addr == proc->state.pc);
+      }
 
+      if (should_print) {
+          printf("\033[1;38;2;0;255;255m VM Page table Walk logs\033[0m\n");
+          printf("base address/page table address: 0x%08lx\n", (unsigned long)base);
+          printf("VPN[%d]: 0x%08lx\n", i, (unsigned long)idx);
+          printf("state pc: 0x%08x\n", (unsigned int)proc->state.pc);
+          printf("virtual addr: 0x%08x\n", (unsigned int)addr);
+          printf("PTE level: %d\n", i);
+          printf("[PTW] PTE raw: 0x%016lx\n", pte);
+          printf("PTE_PHYSICAL_ADDR: 0x%016lx\n", pte_paddr);
 
-    // Enable logging if PTE_V is set and logging is not already enabled
-      proc->enable_log_commits();
+          // Decode PTE fields (example for RISC-V Sv32)
+          printf("[PTW] PTE: PPN=0x%lx D=%ld A=%ld G=%ld U=%ld X=%ld W=%ld R=%ld V=%ld\n",
+              (pte >> 10),       // PPN
+              (pte >> 7) & 1,    // D (dirty bit)
+              (pte >> 6) & 1,    // A (Accessed bit)
+              (pte >> 5) & 1,    // G (global) enable
+              (pte >> 4) & 1,    // U (user) enable
+              (pte >> 3) & 1,    // X (execute) enable
+              (pte >> 2) & 1,    // W (write enable)
+              (pte >> 1) & 1,    // R (read enable)
+              (pte >> 0) & 1     // V (valid bit)
+          );
 
-    } 
+          printf("PTE Offset bits: ");
+          printf("%c", (pte >> 7) & 1 ? 'd' : '.');
+          printf("%c", (pte >> 6) & 1 ? 'a' : '.');
+          printf("%c", (pte >> 5) & 1 ? 'g' : '.');
+          printf("%c", (pte >> 4) & 1 ? 'u' : '.');
+          printf("%c", (pte >> 3) & 1 ? 'x' : '.');
+          printf("%c", (pte >> 2) & 1 ? 'w' : '.');
+          printf("%c", (pte >> 1) & 1 ? 'r' : '.');
+          printf("%c\n", (pte >> 0) & 1 ? 'v' : '.');
+          printf("XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX\n");
+          printf("                                               \n");
+          printf("                                               \n");
+
+          // Enable logging if PTE_V is set and logging is not already enabled
+          proc->enable_log_commits();
+      }
+    }
 
     reg_t ppn = (pte & ~reg_t(PTE_ATTR)) >> PTE_PPN_SHIFT;
     bool pbmte = virt ? (proc->get_state()->henvcfg->read() & HENVCFG_PBMTE) : (proc->get_state()->menvcfg->read() & MENVCFG_PBMTE);
@@ -654,7 +682,7 @@ reg_t mmu_t::walk(mem_access_info_t access_info)
     } else if (PTE_TABLE(pte)) { // next level of page table
       if (pte & (PTE_D | PTE_A | PTE_U | PTE_N | PTE_PBMT))
         break;
-      base = ppn << PGSHIFT;
+      base = ppn << PGSHIFT; //pointer to a next level PT
     } else if ((pte & PTE_U) ? s_mode && (type == FETCH || !sum) : !s_mode) {
       break;
     } else if (!(pte & PTE_V) ||
@@ -684,7 +712,7 @@ reg_t mmu_t::walk(mem_access_info_t access_info)
       reg_t ad = PTE_A | ((type == STORE) * PTE_D);
 
       if ((pte & ad) != ad) {
-        if (hade) {
+        if (hade) {   //If hade is enabled, use second-stage translation to store the bits
           // Check for write permission to the first-stage PT in second-stage
           // PTE and set the D bit in the second-stage PTE if needed
           s2xlate(addr, base + idx * vm.ptesize, STORE, type, virt, false, true);
@@ -697,13 +725,59 @@ reg_t mmu_t::walk(mem_access_info_t access_info)
       }
 
       // for superpage or Svnapot NAPOT mappings, make a fake leaf PTE for the TLB's benefit.
-      reg_t vpn = addr >> PGSHIFT;
+      reg_t vpn = addr >> PGSHIFT; //Removes the page offset (e.g., bottom 12 bits for 4KB pages)
 
       reg_t page_base = ((ppn & ~((reg_t(1) << napot_bits) - 1))
                         | (vpn & ((reg_t(1) << napot_bits) - 1))
                         | (vpn & ((reg_t(1) << ptshift) - 1))) << PGSHIFT;
       reg_t phys = page_base | (addr & page_mask);
-      return s2xlate(addr, phys, type, type, virt, hlvx, false) & ~page_mask;
+      return s2xlate(addr, phys, type, type, virt, hlvx, false) & ~page_mask; //second-stage translation if  the walk succeeds Function exits early no bug_pte printing 
+    }
+  }
+
+  /////////////////////////////////////////////////////////
+  //If any failure occurred (break hit), print fault info only if break/fault not on successfull returned with a valid physical address//
+  /////////////////////////////////////////////////////////
+
+
+  if (bug_pte) {
+    //bool should_print = proc->get_cfg().debug_ptw_enable || (addr == proc->state.pc);
+    bool should_print = true;
+
+    if (should_print) {
+      printf("\033[1;91mVM Page table Walk logs (PAGE FAULT)\033[0m\n");
+      printf("base address: 0x%lx\n", (unsigned long)base);
+      printf("VPN[%d]: 0x%lx\n", pte_vm_level, (unsigned long)idx_o);
+      printf("state pc: 0x%x\n", (unsigned int)proc->state.pc);
+      printf("virtual addr: 0x%x\n", (unsigned int)addr);
+      printf("PTE level: %d\n", pte_vm_level);
+      printf("PTE raw: 0x%lx\n", (unsigned long)pte_o);
+      printf("PTE_PHYSICAL_ADDR: 0x%lx\n", (unsigned long)pte_paddr_o);
+      
+      printf("PTE: PPN=0x%lx D=%ld A=%ld G=%ld U=%ld X=%ld W=%ld R=%ld V=%ld\n",
+          (pte_o >> 10),
+          (pte_o >> 7) & 1,
+          (pte_o >> 6) & 1,
+          (pte_o >> 5) & 1,
+          (pte_o >> 4) & 1,
+          (pte_o >> 3) & 1,
+          (pte_o >> 2) & 1,
+          (pte_o >> 1) & 1,
+          (pte_o >> 0) & 1
+      );
+      
+      printf("PTE bits: ");
+      printf("%c", (pte_o >> 7) & 1 ? 'd' : '.');
+      printf("%c", (pte_o >> 6) & 1 ? 'a' : '.');
+      printf("%c", (pte_o >> 5) & 1 ? 'g' : '.');
+      printf("%c", (pte_o >> 4) & 1 ? 'u' : '.');
+      printf("%c", (pte_o >> 3) & 1 ? 'x' : '.');
+      printf("%c", (pte_o >> 2) & 1 ? 'w' : '.');
+      printf("%c", (pte_o >> 1) & 1 ? 'r' : '.');
+      printf("%c\n", (pte_o >> 0) & 1 ? 'v' : '.');
+      printf("=================================\n");
+      
+      proc->enable_log_commits();
     }
   }
 

@@ -57,6 +57,8 @@ struct dtlb_entry_t {
   reg_t tag;
 };
 
+extern bool d_pte;
+
 struct xlate_flags_t {
   const bool forced_virt : 1 {false};
   const bool hlvx : 1 {false};
