@@ -597,7 +597,13 @@ void processor_t::disasm(insn_t insn)
 {
   uint64_t bits = insn.bits();
   static int exc = 0;  // Static so it retains value across function calls
+  printf("pc <---- 0x%08x  :", (unsigned int)state.pc);
   static uint64_t pc_count = 0;
+  pc_count++;
+  //printf("\n");
+  printf("@(%ld) \n", pc_count);
+
+
   // Predefine the specific instruction to track (addi in this case)
   const std::string target_instruction = ".";
   std::string current_instruction = disassembler->disassemble(insn);
@@ -615,7 +621,6 @@ void processor_t::disasm(insn_t insn)
 
   if (last_pc != state.pc || last_bits != bits) {
     std::stringstream s;  // first put everything in a string, later send it to output
-    pc_count++;
     const char* sym = get_symbol(state.pc);
     if (sym != nullptr)
     {
@@ -627,19 +632,6 @@ void processor_t::disasm(insn_t insn)
       s << "<core " << std::dec << std::setfill(' ') << std::setw(3) << id << ">"
         << ": Executed " << executions << " times" << std::endl;
     }
-    printf("\n");
-    printf("-----------------------------------------------------------------------\n");
-    printf("\033[1;38;2;207;255;0mSTART\033[0m\n");
-    printf("PC_COUNT's = %ld", pc_count);
-    if(state.prv == 0)
-      fprintf(log_file, "\033[1;97mU-mode\033[0m\n");
-    else if(state.prv == 1)
-      fprintf(log_file, "\033[1;97mS-mode\033[0m\n");
-    else if(state.prv == 2)
-      fprintf(log_file, "Reserved\n");
-    else
-      fprintf(log_file, "\033[1;97mM-mode\033[0m\n");
-    printf("\n");
 
     unsigned max_xlen = isa.get_max_xlen();
 

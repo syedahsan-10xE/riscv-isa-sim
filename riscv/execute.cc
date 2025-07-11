@@ -75,13 +75,13 @@ static void commit_log_print_insn(processor_t *p, reg_t pc, insn_t insn)
 
   //fprintf(log_file, "%1d ", priv);
   if(priv == 0)
-    fprintf(log_file, "U-mode\n");
+    fprintf(log_file, "U-mode");
   else if(priv == 1)
-    fprintf(log_file, "S-mode\n");
+    fprintf(log_file, "S-mode");
   else if(priv == 2)
-    fprintf(log_file, "Reserved\n");
+    fprintf(log_file, "Reserved");
   else
-    fprintf(log_file, "M-mode\n");
+    fprintf(log_file, "M-mode");
   printf("\n");
   commit_log_print_value(log_file, xlen, pc);
   fprintf(log_file, " (");
@@ -194,14 +194,8 @@ static inline reg_t execute_insn_logged(processor_t* p, reg_t pc, insn_fetch_t f
       if (p->get_log_commits_enabled()) {
         commit_log_print_insn(p, pc, fetch.insn);
       }
-          printf("PC log's\n");
-          printf("Executed instruction at PC <---- %x\n", (unsigned int)pc);
-          printf("Instruction opcode: %lx\n", fetch.insn.bits());
-          // Print "END" in green color
-          printf("\033[1;92mEND\033[0m\n");
-          printf("-----------------------------------------------------------------------\n");
+          printf("opcode: %lx \n", fetch.insn.bits());
 
-          printf("\n");
      }
   } catch (wait_for_interrupt_t &t) {
       if (p->get_log_commits_enabled()) {
