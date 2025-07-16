@@ -591,6 +591,7 @@ reg_t mmu_t::walk(mem_access_info_t access_info)
 
 
   bool page_fault_occurred = false;  // Flag to track if page fault will occur
+  bool success_walk = false; // Flag to track if page walk was successful
 
   reg_t idx_o = 0;
   int pte_vm_level = 2;
@@ -620,10 +621,16 @@ reg_t mmu_t::walk(mem_access_info_t access_info)
           bug_pte = true;
       } else {
           // Debug is low: print only when addr == state.pc only page table walk no repetition
-          should_print = (addr == proc->state.pc);
+          should_print = (addr == proc->state.pc) || ((type == LOAD || type == STORE));
       }
 
       if (should_print) {
+          printf("%s%s%s ",
+               type == FETCH ? "\033[1;95mFETCH" :     // Bright magenta
+               type == LOAD  ? "\033[1;96mLOAD"  :     // Bright cyan
+               type == STORE ? "\033[1;93mSTORE" :     // Bright yellow
+                               "\033[1;91m?",          // Bright red for unknown
+               "\033[0m", "", "");  
           printf("<core %0d> ", proc->id);
           printf("[* :0x%08lx -->", pte_paddr);
           printf(" 0x%08lx ;", pte);
@@ -759,6 +766,8 @@ reg_t mmu_t::walk(mem_access_info_t access_info)
                         | (vpn & ((reg_t(1) << ptshift) - 1))) << PGSHIFT;
       reg_t phys = page_base | (addr & page_mask);
       return s2xlate(addr, phys, type, type, virt, hlvx, false) & ~page_mask; //second-stage translation if  the walk succeeds Function exits early no bug_pte printing 
+      success_walk = true; // Page walk was successful
+      break; // Exit the loop as we found a valid PTE
     }
     page_fault_occurred  = true;
   }
@@ -768,7 +777,7 @@ reg_t mmu_t::walk(mem_access_info_t access_info)
   /////////////////////////////////////////////////////////
 
 
-  if (bug_pte || page_fault_occurred) {
+  if (bug_pte || ((page_fault_occurred) && (!success_walk))) {
     //bool should_print = proc->get_cfg().debug_ptw_enable || (addr == proc->state.pc);
     bool should_print = true;
 
@@ -809,6 +818,12 @@ reg_t mmu_t::walk(mem_access_info_t access_info)
     //}
 
     if (should_print) {
+          printf("%s%s%s ",
+            type == FETCH ? "\033[1;95mFETCH" :     // Bright magenta
+            type == LOAD  ? "\033[1;96mLOAD"  :     // Bright cyan
+            type == STORE ? "\033[1;93mSTORE" :     // Bright yellow
+                            "\033[1;91m?",          // Bright red for unknown
+            "\033[0m", "", "");            
           printf("\033[1;91mVM Page table Walk logs (PAGE FAULT)\033[0m\n");
           printf("<core  %0d> ", proc->id);
           printf("[* :0x%08x -->", pte_paddr_o);
