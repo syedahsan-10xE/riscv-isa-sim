@@ -52,7 +52,7 @@ void throw_access_exception(bool virt, reg_t addr, access_type type)
 }
 
 
-reg_t mmu_t::translate(mem_access_info_t access_info, reg_t len)
+reg_t mmu_t::translate(mem_access_info_t access_info, reg_t len, bool tlb_hit)
 {
   reg_t addr = access_info.transformed_vaddr;
   access_type type = access_info.type;
@@ -61,8 +61,7 @@ reg_t mmu_t::translate(mem_access_info_t access_info, reg_t len)
 
   bool virt = access_info.effective_virt;
   reg_t mode = (reg_t) access_info.effective_priv;
-
-  reg_t paddr = walk(access_info) | (addr & (PGSIZE-1));
+  reg_t paddr = walk(access_info, tlb_hit) | (addr & (PGSIZE-1));
   if (!pmp_ok(paddr, len, access_info.flags.ss_access ? STORE : type, mode, access_info.flags.hlvx))
     throw_access_exception(virt, addr, access_info.flags.ss_access ? STORE : type);
   return paddr;
@@ -98,7 +97,7 @@ mmu_t::insn_parcel_t mmu_t::fetch_slow_path(reg_t vaddr)
   check_triggers(triggers::OPERATION_EXECUTE, vaddr, access_info.effective_virt);
 
   if (!tlb_hit) {
-    paddr = translate(access_info, sizeof(insn_parcel_t));
+    paddr = translate(access_info, sizeof(insn_parcel_t), tlb_hit);
     host_addr = (uintptr_t)sim->addr_to_mem(paddr);
 
     refill_tlb(vaddr, paddr, (char*)host_addr, FETCH);
@@ -230,7 +229,7 @@ void mmu_t::load_slow_path_intrapage(reg_t len, uint8_t* bytes, mem_access_info_
   reg_t vaddr = access_info.vaddr;
   auto [tlb_hit, host_addr, paddr] = access_tlb(tlb_load, vaddr, TLB_FLAGS);
   if (!tlb_hit || access_info.flags.is_special_access()) {
-    paddr = translate(access_info, len);
+    paddr = translate(access_info, len, tlb_hit);
     host_addr = (uintptr_t)sim->addr_to_mem(paddr);
 
     if (!access_info.flags.is_special_access())
@@ -312,7 +311,7 @@ void mmu_t::store_slow_path_intrapage(reg_t len, const uint8_t* bytes, mem_acces
   reg_t vaddr = access_info.vaddr;
   auto [tlb_hit, host_addr, paddr] = access_tlb(tlb_store, vaddr, TLB_FLAGS);
   if (!tlb_hit || access_info.flags.is_special_access()) {
-    paddr = translate(access_info, len);
+    paddr = translate(access_info, len, tlb_hit);
     host_addr = (uintptr_t)sim->addr_to_mem(paddr);
 
     if (!access_info.flags.is_special_access())
@@ -383,7 +382,7 @@ tlb_entry_t mmu_t::refill_tlb(reg_t vaddr, reg_t paddr, char* host_addr, access_
 
   if (in_mprv()
       || !pmp_homogeneous(base_paddr, PGSIZE)
-      || (proc && proc->get_log_commits_enabled()))
+      || !(proc && proc->get_log_commits_enabled()))
     return entry;
 
   auto trace_flag = tracer.interested_in_range(base_paddr, base_paddr + PGSIZE, type) ? TLB_CHECK_TRACER : 0;
@@ -554,7 +553,7 @@ reg_t mmu_t::s2xlate(reg_t gva, reg_t gpa, access_type type, access_type trap_ty
   }
 }
 
-reg_t mmu_t::walk(mem_access_info_t access_info)
+reg_t mmu_t::walk(mem_access_info_t access_info, bool tlb_hit)
 {
   access_type type = access_info.type;   //contains memory access details (virtual address, access type, privilege level
   reg_t addr = access_info.transformed_vaddr;  //Get the virtual address to translate
@@ -606,8 +605,8 @@ reg_t mmu_t::walk(mem_access_info_t access_info)
     // check that physical address of PTE is legal
     auto pte_paddr = s2xlate(addr, base + idx * vm.ptesize, LOAD, type, virt, false, true); //Calculate physical address of Page Table Entry (PTE)
     reg_t pte = pte_load(pte_paddr, addr, virt, type, vm.ptesize);  //Load PTE from memory
-
-    if (pte & PTE_V) {
+    if (pte & PTE_V && !tlb_hit) {
+      //printf("TLB = \033[1;31m%s\033[0m ", tlb_hit ? "HIT" : "MISS");
       bool should_print = false;
           
       pte_vm_level = pte_vm_level - i;
@@ -777,7 +776,7 @@ reg_t mmu_t::walk(mem_access_info_t access_info)
   /////////////////////////////////////////////////////////
 
 
-  if (bug_pte || ((page_fault_occurred) && (!success_walk))) {
+  if (bug_pte || ((page_fault_occurred) && (!success_walk)) && !tlb_hit) {
     //bool should_print = proc->get_cfg().debug_ptw_enable || (addr == proc->state.pc);
     bool should_print = true;
 

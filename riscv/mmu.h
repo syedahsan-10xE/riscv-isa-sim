@@ -252,7 +252,8 @@ public:
     for (size_t offset = 0; offset < blocksz; offset += 1)
       check_triggers(triggers::OPERATION_STORE, base + offset, false, transformed_addr, std::nullopt);
     convert_load_traps_to_store_traps({
-      const reg_t paddr = translate(access_info, 1);
+      bool tlb_hit;
+      const reg_t paddr = translate(access_info, 1, tlb_hit);
       if (sim->reservable(paddr)) {
         if (tracer.interested_in_range(paddr, paddr + PGSIZE, LOAD))
           tracer.clean_invalidate(paddr, blocksz, clean, inval);
@@ -273,8 +274,8 @@ public:
       // Raise either access fault or misaligned exception
       store_slow_path(vaddr, size, nullptr, {}, false, true);
     }
-
-    reg_t paddr = translate(generate_access_info(vaddr, STORE, {}), 1);
+    bool tlb_hit;
+    reg_t paddr = translate(generate_access_info(vaddr, STORE, {}), 1, tlb_hit);
     if (sim->reservable(paddr))
       return load_reservation_address == paddr;
     else
@@ -367,6 +368,7 @@ public:
   {
     auto vpn = vaddr / PGSIZE, pgoff = vaddr % PGSIZE;
     auto& entry = tlb[vpn % TLB_ENTRIES];
+    auto index = vpn % TLB_ENTRIES;
     auto hit = likely((entry.tag & (~allowed_flags | required_flags)) == (vpn | required_flags));
     bool mmio = allowed_flags & TLB_MMIO & entry.tag;
     auto host_addr = mmio ? 0 : entry.data.host_addr + pgoff;
@@ -429,7 +431,7 @@ private:
   reg_t s2xlate(reg_t gva, reg_t gpa, access_type type, access_type trap_type, bool virt, bool hlvx, bool is_for_vs_pt_addr);
 
   // perform a page table walk for a given VA; set referenced/dirty bits
-  reg_t walk(mem_access_info_t access_info);
+  reg_t walk(mem_access_info_t access_info, bool tlb_hit);
 
   // handle uncommon cases: TLB misses, page faults, MMIO
   typedef uint16_t insn_parcel_t;
@@ -450,7 +452,7 @@ private:
     check_triggers(operation, address, virt, address, data);
   }
   void check_triggers(triggers::operation_t operation, reg_t address, bool virt, reg_t tval, std::optional<reg_t> data);
-  reg_t translate(mem_access_info_t access_info, reg_t len);
+  reg_t translate(mem_access_info_t access_info, reg_t len, bool tlb_hit);
 
   reg_t pte_load(reg_t pte_paddr, reg_t addr, bool virt, access_type trap_type, size_t ptesize) {
     if (ptesize == 4)
