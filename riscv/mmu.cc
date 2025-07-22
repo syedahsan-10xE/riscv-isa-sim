@@ -382,7 +382,7 @@ tlb_entry_t mmu_t::refill_tlb(reg_t vaddr, reg_t paddr, char* host_addr, access_
 
   if (in_mprv()
       || !pmp_homogeneous(base_paddr, PGSIZE)
-      || !(proc && proc->get_log_commits_enabled()))
+      || (proc && proc->get_log_commits_enabled()))
     return entry;
 
   auto trace_flag = tracer.interested_in_range(base_paddr, base_paddr + PGSIZE, type) ? TLB_CHECK_TRACER : 0;
@@ -651,7 +651,7 @@ reg_t mmu_t::walk(mem_access_info_t access_info, bool tlb_hit)
           else
               printf("va-in: 0x%08x\n", (unsigned int)addr);
               /// Enable logging if PTE_V is set and logging is not already enabled
-        proc->enable_log_commits();
+        //proc->enable_log_commits();
       }
     }
 
@@ -844,7 +844,7 @@ reg_t mmu_t::walk(mem_access_info_t access_info, bool tlb_hit)
           else
               printf("va-in: 0x%08x   ;\n", (unsigned int)addr);
           // Enable logging if PTE_V is set and logging is not already enabled
-          proc->enable_log_commits();
+          //proc->enable_log_commits();
       }
 
   }
